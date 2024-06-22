@@ -1,18 +1,13 @@
 //
 // Created by shei on 19/06/24.
 //
-#include <cstring>
-#include <cstdio>
-#include <unistd.h>
 #include "LikeRedisServer.h"
-#include "../Networking/TCP/Errors/TCPServerException.h"
-#include "../Common/LikeRedis/Server/LikeRedisServerHelpers.h"
-
-
+#include "../EventLoop/EventLoop.h"
 LikeRedisServer::LikeRedisServer(int port) : TCPServer(port) {
-    this->handleConnections(LikeRedisServer::handleConnection);
+    //Initialize Event Loop
+    auto eventLoop = EventLoop(this->getSocket());
 }
 
 void LikeRedisServer::handleConnection(int connFd) {
-    LikeRedisServerHelpers::one_request(connFd);
+    //Initialze
 }

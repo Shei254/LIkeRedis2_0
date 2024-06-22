@@ -8,11 +8,10 @@
 #include "Errors/TCPClientException.h"
 
 TCPClient::TCPClient(const std::string& domain, std::string port) {
-    int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    this->sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (sock < 0) {
         throw TCPClientException("[-] Error creating socket");
     }
-    this->sock = sock;
 
     struct addrinfo hints = {};
     hints.ai_family = AF_INET;
@@ -37,6 +36,10 @@ TCPClient::TCPClient(const std::string& domain, std::string port) {
 void TCPClient::handleTcpConnection(void (*connection_handler)(int)) {
     connection_handler(this->sock);
     close(this->sock);
+}
+
+int TCPClient::getSocket() {
+    return this->sock;
 }
 
 

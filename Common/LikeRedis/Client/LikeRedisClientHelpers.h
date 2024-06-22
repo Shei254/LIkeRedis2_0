@@ -7,10 +7,13 @@
 
 
 #include <cstdint>
+#include <vector>
+#include <string>
 
 class LikeRedisClientHelpers {
 public:
-    static int32_t query(int connFd, const char* text);
+    static int32_t send_req (int fd, const std::vector<std::string> &cmd);
+    static int32_t recv_res(int fd);
 };
 
 

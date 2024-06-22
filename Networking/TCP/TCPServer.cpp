@@ -4,6 +4,7 @@
 
 #include "TCPServer.h"
 #include "Errors/TCPServerException.h"
+#include "../../Common/LikeRedis/LikeRedisCommonHelpers.h"
 
 #include <unistd.h>
 #include <sys/socket.h>
@@ -24,6 +25,9 @@ void TCPServer::createServer() {
     //Make Ports Reusable
     int val = 1;
     setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
+
+    //Set Socket To Non Blocking
+    LikeRedisCommonHelpers::fd_set_non_blocking(sock);
 
     //Bing Socket To Address
     struct sockaddr_in addr = {};
@@ -64,6 +68,9 @@ void TCPServer::handleConnections(void (*accept_connection)(int)) {
 
         accept_connection(connFd);
         close(connFd);
+
+
+        printf("[+] Client connection closed successfully\n");
     }
 }
 

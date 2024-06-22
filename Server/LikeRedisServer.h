@@ -4,7 +4,10 @@
 
 #ifndef LIKEREDIS2_0_LIKEREDISSERVER_H
 #define LIKEREDIS2_0_LIKEREDISSERVER_H
+
+#include <unordered_map>
 #include "../Networking/TCP/TCPServer.h"
+#include "../EventLoop/EventLoop.h"
 
 class LikeRedisServer : public TCPServer {
 private:

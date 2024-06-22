@@ -12,6 +12,7 @@ private:
 public:
     TCPClient(const std::string& domain, std::string port);
     void handleTcpConnection (void (*connection_handler)(int sock));
+    int getSocket();
 };
 
 
