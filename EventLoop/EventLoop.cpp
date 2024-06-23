@@ -6,14 +6,12 @@
 #include <netinet/in.h>
 #include <iostream>
 #include <vector>
-#include <map>
+#include "absl/container/flat_hash_map.h"
 #include "EventLoop.h"
 #include "../Networking/TCP/Errors/TCPServerException.h"
+#include "../Common/LikeRedis/LikeRedisCommonHelpers.h"
 
-//HashTable PlaceHolder
-// TODO: DELETE ME
-static std::map<std::string, std::string> g_map;
-
+static absl::flat_hash_map<std::string, std::string> g_map;
 
 EventLoop::EventLoop(int serverFd) {
     std::vector<epoll_event> events;
@@ -169,15 +167,17 @@ bool EventLoop::try_one_request(Conn *conn) {
 
     uint32_t resCode = 0;
     uint32_t wLen = 0;
-    int32_t err = handle_request(&conn->r_buf[4], len, &resCode, &conn->w_buf[4 + 4], &wLen);
-    if (err) {
-        conn->state = STATE_END;
-        return false;
+
+    std::string response;
+    handle_request(&conn->r_buf[4], len, response);
+    if (4 + response.size() > k_max_msg) {
+        response.clear();
+        err_response(response, 2000, "Response too big");
     }
 
     wLen += 4;
     memcpy(&conn->w_buf[0], &wLen, 4);
-    memcpy(&conn->w_buf[4], &resCode, 4);
+    memcpy(&conn->w_buf[4], response.data(), response.size());
     conn->w_buf_size = 4 + wLen;
 
     size_t remain = conn->r_buf_size - 4 - len;
@@ -261,34 +261,32 @@ int32_t EventLoop::accept_new_connection(int fd, std::vector<Conn*>& connections
     return 0;
 }
 
-int32_t EventLoop::handle_request(const uint8_t *req, uint32_t reqLen, uint32_t *resCode, uint8_t *res, uint32_t *resLen) {
+void EventLoop::handle_request(const uint8_t* req, uint32_t reqLen, std::string &response) {
     std::vector<std::string> cmd;
+
     if (0 != parse_request(req, reqLen, cmd)) {
-        return -1;
+        throw TCPServerException("Invalid Request");
     }
 
     if (cmd.size() == 2 ) {
         if ((strcasecmp((const char *) cmd[0].data(), "get")) == 0) {
             // Handle Get Commands
-            *resCode = handle_get_request(cmd, res, resLen);
+            handle_get_request(cmd, response);
         } else if (strcasecmp(cmd[0].data(), "del") == 0) {
             //Handle Delete Commands
-        }   *resCode = handle_del_request(cmd, res, resLen);
+            handle_del_request(cmd, response);
+        } else if (strcasecmp(cmd[0].data(), "keys") == 0) {
+            //Handle Keys Commands
+            handle_keys_request(cmd, response);
+        }
     } else if (cmd.size() == 3) {
         if (strcasecmp(cmd[0].data(), "set") == 0) {
             // Handle Set Commands
-            *resCode = handle_set_request(cmd, res, resLen);
+            handle_set_request(cmd, response);
         }
     } else {
-        *resCode = RES_ERR;
-        const char* msg = "Unknown Command";
-        strcpy((char *)res, msg);
-
-        *resLen = strlen(msg);
-        return 0;
+        err_response(response, 2204, "Unknown Command");
     }
-
-    return 0;
 }
 
 int32_t EventLoop::parse_request(const uint8_t *data, size_t len, std::vector<std::string> &out) {
@@ -327,32 +325,62 @@ int32_t EventLoop::parse_request(const uint8_t *data, size_t len, std::vector<st
     return 0;
 }
 
-uint32_t EventLoop::handle_get_request(const std::vector<std::string> &cmd, uint8_t *res, uint32_t *resLen) {
+void EventLoop::handle_get_request(const std::vector<std::string> &cmd, std::string &response) {
     if (!g_map.count(cmd[1])) {
-        return RES_NX;
+        nil_response(response);
     }
 
-    std::string &val = g_map[cmd[1]];
-    assert(val.size() <= k_max_msg);
+    auto val = g_map.find(std::string(cmd[1]));
+    assert(val->second.size() <= k_max_msg);
 
-    memcpy(res, val.data(), val.size());
-    *resLen = (uint32_t)val.size();
-    return RES_OK;
+    str_response(response, val->second);
 }
 
-uint32_t EventLoop::handle_set_request(const std::vector<std::string> &cmd, uint8_t *res, uint32_t *resLen) {
-    (void) res;
-    (void) resLen;
-
-    g_map[cmd[1]] = cmd[2];
-
-    return RES_OK;
+void EventLoop::handle_set_request(const std::vector<std::string> &cmd, std::string &response) {
+    g_map.try_emplace(cmd[1], cmd[2]);
+    nil_response(response);
 }
 
-uint32_t EventLoop::handle_del_request(const std::vector<std::string> &cmd, uint8_t *res, uint32_t *resLen) {
-    (void) res;
-    (void) resLen;
-
+void EventLoop::handle_del_request(const std::vector<std::string> &cmd, std::string &response) {
     g_map.erase(cmd[1]);
-    return RES_OK;
+    nil_response(response);
 }
+
+
+void EventLoop::handle_keys_request(std::vector<std::string> &cmd, std::string &response) {
+    arr_response(response, g_map.size());
+    for (const auto &[key, value] : g_map) {
+        str_response(response, key);
+    }
+}
+
+void EventLoop::nil_response(std::string &response) {
+    response.push_back(SER_NIL);
+}
+
+void EventLoop::str_response(std::string &response, const std::string &val) {
+    response.push_back(SER_STR);
+    auto len = (uint32_t) val.size();
+    response.append((char *)&len, 4);
+    response.append(val);
+}
+
+void EventLoop::int_response(std::string &response, int64_t val) {
+    response.push_back(SER_INT);
+    response.append((char *)&val, 8);
+}
+
+void EventLoop::err_response(std::string &response, int32_t code, const std::string &msg) {
+    response.push_back(SER_ERR);
+    response.append((char *)&code, 4);
+
+    auto len = (uint32_t)msg.size();
+    response.append((char *)&len, 4);
+    response.append(msg);
+}
+
+void EventLoop::arr_response(std::string &response, uint32_t n) {
+    response.push_back(SER_ERR);
+    response.append((char *)&n, 4);
+}
+

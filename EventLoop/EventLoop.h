@@ -53,10 +53,18 @@ private:
     static void connection_put(Conn* conn, std::vector<Conn*> &connections);
     static int32_t parse_request(const uint8_t* data, size_t len, std::vector<std::string> &out);
     static int32_t accept_new_connection(int fd, std::vector<Conn*> &connections);
-    static int32_t handle_request(const uint8_t* req, uint32_t reqLen, uint32_t* resCode, uint8_t* res, uint32_t* resLen);
-    static uint32_t handle_get_request(const std::vector<std::string> &cmd, uint8_t *res, uint32_t *resLen);
-    static uint32_t handle_set_request(const std::vector<std::string> &cmd, uint8_t* res, uint32_t* resLen);
-    static uint32_t handle_del_request(const std::vector<std::string> &cmd, uint8_t* res, uint32_t* resLen);
+    static void handle_request(const uint8_t* req, uint32_t reqLen, std::string &response);
+    static void handle_get_request(const std::vector<std::string> &cmd, std::string &response);
+    static void handle_set_request(const std::vector<std::string> &cmd, std::string &response);
+    static void handle_del_request(const std::vector<std::string> &cmd, std::string &response);
+
+    static void handle_keys_request(std::vector<std::string> &cmd, std::string &response);
+
+    static void nil_response (std::string &response);
+    static void str_response (std::string &response, const std::string &val);
+    static void int_response(std::string &response, int64_t val);
+    static void err_response(std::string &response, int32_t code, const std::string &msg);
+    static void arr_response(std::string &response, uint32_t n);
 public:
     explicit EventLoop(int serverFd);
 };

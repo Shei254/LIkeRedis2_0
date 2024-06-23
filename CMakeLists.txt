@@ -3,6 +3,8 @@ project(LikeRedis2_0)
 
 set(CMAKE_CXX_STANDARD 17)
 
+add_subdirectory(abseil-cpp)
+
 add_executable(LikeRedisServer2_0 server.cpp
         Networking/TCP/TCPServer.h
         Networking/TCP/TCPServer.cpp
@@ -29,4 +31,8 @@ add_executable(LikeRedisClient2_0 client.cpp
         Common/LikeRedis/LikeRedisCommonHelpers.cpp
         Common/LikeRedis/Client/LikeRedisClientHelpers.h
         Common/LikeRedis/Client/LikeRedisClientHelpers.cpp
+        DataStructures/Trees/AvlTree.cpp
+        DataStructures/Trees/AvlTree.h
 )
+
+target_link_libraries(LikeRedisServer2_0 absl::flat_hash_map)

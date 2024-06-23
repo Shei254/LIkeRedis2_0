@@ -8,6 +8,14 @@
 #include <cctype>
 #include <cstdio>
 
+enum {
+    SER_NIL = 0,
+    SER_ERR = 1,
+    SER_STR = 2,
+    SER_INT = 3,
+    SER_ARR = 4
+};
+
 class LikeRedisCommonHelpers {
 public:
     static void fd_set_non_blocking(int fd);
