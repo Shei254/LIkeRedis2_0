@@ -173,9 +173,10 @@ bool EventLoop::try_one_request(Conn *conn) {
     if (4 + response.size() > k_max_msg) {
         response.clear();
         err_response(response, 2000, "Response too big");
+        return false;
     }
 
-    wLen += 4;
+    wLen = response.size();
     memcpy(&conn->w_buf[0], &wLen, 4);
     memcpy(&conn->w_buf[4], response.data(), response.size());
     conn->w_buf_size = 4 + wLen;
@@ -265,27 +266,27 @@ void EventLoop::handle_request(const uint8_t* req, uint32_t reqLen, std::string 
     std::vector<std::string> cmd;
 
     if (0 != parse_request(req, reqLen, cmd)) {
-        throw TCPServerException("Invalid Request");
-    }
-
-    if (cmd.size() == 2 ) {
-        if ((strcasecmp((const char *) cmd[0].data(), "get")) == 0) {
-            // Handle Get Commands
-            handle_get_request(cmd, response);
-        } else if (strcasecmp(cmd[0].data(), "del") == 0) {
-            //Handle Delete Commands
-            handle_del_request(cmd, response);
-        } else if (strcasecmp(cmd[0].data(), "keys") == 0) {
-            //Handle Keys Commands
-            handle_keys_request(cmd, response);
-        }
-    } else if (cmd.size() == 3) {
-        if (strcasecmp(cmd[0].data(), "set") == 0) {
-            // Handle Set Commands
-            handle_set_request(cmd, response);
-        }
+        err_response(response, 2204, "Invalid Request");
     } else {
-        err_response(response, 2204, "Unknown Command");
+        if (cmd.size() == 2 ) {
+            if ((strcasecmp((const char *) cmd[0].data(), "get")) == 0) {
+                // Handle Get Commands
+                handle_get_request(cmd, response);
+            } else if (strcasecmp(cmd[0].data(), "del") == 0) {
+                //Handle Delete Commands
+                handle_del_request(cmd, response);
+            } else if (strcasecmp(cmd[0].data(), "keys") == 0) {
+                //Handle Keys Commands
+                handle_keys_request(cmd, response);
+            }
+        } else if (cmd.size() == 3) {
+            if (strcasecmp(cmd[0].data(), "set") == 0) {
+                // Handle Set Commands
+                handle_set_request(cmd, response);
+            }
+        } else {
+            err_response(response, 2204, "Unknown Command");
+        }
     }
 }
 
@@ -371,12 +372,15 @@ void EventLoop::int_response(std::string &response, int64_t val) {
 }
 
 void EventLoop::err_response(std::string &response, int32_t code, const std::string &msg) {
-    response.push_back(SER_ERR);
-    response.append((char *)&code, 4);
+    std::ostringstream buffer;
+    buffer << SER_ERR;
+    buffer << code;
 
     auto len = (uint32_t)msg.size();
-    response.append((char *)&len, 4);
-    response.append(msg);
+    buffer << len;
+    buffer << msg;
+
+    response.append(buffer.str());
 }
 
 void EventLoop::arr_response(std::string &response, uint32_t n) {
