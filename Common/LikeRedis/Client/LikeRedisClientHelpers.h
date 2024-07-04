@@ -9,11 +9,12 @@
 #include <cstdint>
 #include <vector>
 #include <string>
+#include "../LikeRedisCommonHelpers.h"
 
 class LikeRedisClientHelpers {
 public:
-    static int32_t send_req (int fd, const std::vector<std::string> &cmd);
-    static int32_t handle_response(const uint8_t* data, size_t size);
+    static int32_t send_req (int fd, LR_REQUEST* request);
+    static int32_t handle_response(LR_RESPONSE *response);
     static int32_t recv_res(int fd);
 };
 

@@ -168,18 +168,17 @@ bool EventLoop::try_one_request(Conn *conn) {
     uint32_t resCode = 0;
     uint32_t wLen = 0;
 
-    std::string response;
-    handle_request(&conn->r_buf[4], len, response);
-    if (4 + response.size() > k_max_msg) {
-        response.clear();
-        err_response(response, 2000, "Response too big");
+    LR_RESPONSE lr{};
+    auto request = (LR_REQUEST *)&conn->r_buf[4];
+
+    handle_request(request, lr);
+    if (4 + lr.dataLen > k_max_msg) {
+        err_response(lr, 2000, "Response too big");
         return false;
     }
 
-    wLen = response.size();
-    memcpy(&conn->w_buf[0], &wLen, 4);
-    memcpy(&conn->w_buf[4], response.data(), response.size());
-    conn->w_buf_size = 4 + wLen;
+    memcpy(&conn->w_buf, &lr, sizeof(lr));
+    conn->w_buf_size = sizeof(lr);
 
     size_t remain = conn->r_buf_size - 4 - len;
     if (remain) {
@@ -262,31 +261,24 @@ int32_t EventLoop::accept_new_connection(int fd, std::vector<Conn*>& connections
     return 0;
 }
 
-void EventLoop::handle_request(const uint8_t* req, uint32_t reqLen, std::string &response) {
+void EventLoop::handle_request(LR_REQUEST* req, LR_RESPONSE &response) {
     std::vector<std::string> cmd;
-
-    if (0 != parse_request(req, reqLen, cmd)) {
-        err_response(response, 2204, "Invalid Request");
-    } else {
-        if (cmd.size() == 2 ) {
-            if ((strcasecmp((const char *) cmd[0].data(), "get")) == 0) {
-                // Handle Get Commands
-                handle_get_request(cmd, response);
-            } else if (strcasecmp(cmd[0].data(), "del") == 0) {
-                //Handle Delete Commands
-                handle_del_request(cmd, response);
-            } else if (strcasecmp(cmd[0].data(), "keys") == 0) {
-                //Handle Keys Commands
-                handle_keys_request(cmd, response);
-            }
-        } else if (cmd.size() == 3) {
-            if (strcasecmp(cmd[0].data(), "set") == 0) {
-                // Handle Set Commands
-                handle_set_request(cmd, response);
-            }
-        } else {
+    switch (req->command) {
+        case GET:
+            handle_get_request(req, response);
+            break;
+        case DEL:
+            handle_del_request(req, response);
+            break;
+        case SET:
+            handle_set_request(req, response);
+            break;
+        case KEYS:
+            handle_keys_request(req, response);
+            break;
+        default:
             err_response(response, 2204, "Unknown Command");
-        }
+            break;
     }
 }
 
@@ -326,65 +318,77 @@ int32_t EventLoop::parse_request(const uint8_t *data, size_t len, std::vector<st
     return 0;
 }
 
-void EventLoop::handle_get_request(const std::vector<std::string> &cmd, std::string &response) {
-    if (!g_map.count(cmd[1])) {
+void EventLoop::handle_get_request(LR_REQUEST *request, LR_RESPONSE &response) {
+    if (!g_map.count(request->key)) {
         nil_response(response);
+        return;
     }
 
-    auto val = g_map.find(std::string(cmd[1]));
+    auto val = g_map.find(std::string(request->key));
     assert(val->second.size() <= k_max_msg);
 
     str_response(response, val->second);
 }
 
-void EventLoop::handle_set_request(const std::vector<std::string> &cmd, std::string &response) {
-    g_map.try_emplace(cmd[1], cmd[2]);
+void EventLoop::handle_set_request(LR_REQUEST *request, LR_RESPONSE &response) {
+    char dataStr[request->dataLen + 1];
+    memset(dataStr, 0, request->dataLen + 1);
+    memcpy(dataStr, request->data, request->dataLen);
+
+    g_map.try_emplace(request->key, std::string(dataStr));
     nil_response(response);
 }
 
-void EventLoop::handle_del_request(const std::vector<std::string> &cmd, std::string &response) {
-    g_map.erase(cmd[1]);
+void EventLoop::handle_del_request(LR_REQUEST *request, LR_RESPONSE &response) {
+    g_map.erase(request->key);
     nil_response(response);
 }
 
 
-void EventLoop::handle_keys_request(std::vector<std::string> &cmd, std::string &response) {
+void EventLoop::handle_keys_request(LR_REQUEST *request, LR_RESPONSE &response) {
     arr_response(response, g_map.size());
     for (const auto &[key, value] : g_map) {
         str_response(response, key);
     }
 }
 
-void EventLoop::nil_response(std::string &response) {
-    response.push_back(SER_NIL);
+void EventLoop::nil_response(LR_RESPONSE &response) {
+    response.serialization = SER_NIL;
 }
 
-void EventLoop::str_response(std::string &response, const std::string &val) {
-    response.push_back(SER_STR);
-    auto len = (uint32_t) val.size();
-    response.append((char *)&len, 4);
-    response.append(val);
+void EventLoop::str_response(LR_RESPONSE &response, const std::string &val) {
+    response.serialization = SER_STR;
+    response.dataLen = val.size();
+
+    response.data = calloc(1, response.dataLen);
+    if (!response.data) {
+        throw TCPServerException("Error allocating memory for response data (nil_response)");
+    }
+
+    memcpy(response.data, val.data(), response.dataLen);
 }
 
-void EventLoop::int_response(std::string &response, int64_t val) {
-    response.push_back(SER_INT);
-    response.append((char *)&val, 8);
+void EventLoop::int_response(LR_RESPONSE &response, int64_t val) {
+    struct LR_RESPONSE lr{};
+    lr.statusCode = 200;
+    lr.dataLen = sizeof(val);
+
+    lr.data = calloc(1, sizeof(val));
+    if (lr.data) {
+        throw TCPServerException("Error allocating memory for response buffer");
+    }
 }
 
-void EventLoop::err_response(std::string &response, int32_t code, const std::string &msg) {
-    std::ostringstream buffer;
-    buffer << SER_ERR;
-    buffer << code;
+void EventLoop::err_response(LR_RESPONSE &response, int32_t code, const std::string &msg) {
+    response.serialization = SER_ERR;
+    response.statusCode = code;
+    response.dataLen = msg.size();
 
-    auto len = (uint32_t)msg.size();
-    buffer << len;
-    buffer << msg;
-
-    response.append(buffer.str());
+    memcpy(response.data, msg.data(), msg.size());
 }
 
-void EventLoop::arr_response(std::string &response, uint32_t n) {
-    response.push_back(SER_ERR);
-    response.append((char *)&n, 4);
+void EventLoop::arr_response(LR_RESPONSE &response, uint32_t n) {
+    response.serialization = SER_ARR;
+    response.dataLen = n;
 }
 

@@ -18,6 +18,8 @@ add_executable(LikeRedisServer2_0 server.cpp
         Common/LikeRedis/LikeRedisCommonHelpers.cpp
         EventLoop/EventLoop.h
         EventLoop/EventLoop.cpp
+        DataStructures/Trees/Avl/AvlTree.h
+        DataStructures/Trees/Avl/AvlTree.cpp
 )
 
 add_executable(LikeRedisClient2_0 client.cpp
@@ -31,8 +33,8 @@ add_executable(LikeRedisClient2_0 client.cpp
         Common/LikeRedis/LikeRedisCommonHelpers.cpp
         Common/LikeRedis/Client/LikeRedisClientHelpers.h
         Common/LikeRedis/Client/LikeRedisClientHelpers.cpp
-        DataStructures/Trees/AvlTree.cpp
-        DataStructures/Trees/AvlTree.h
+        DataStructures/Trees/Avl/AvlTree.cpp
+        DataStructures/Trees/Avl/AvlTree.h
 )
 
 target_link_libraries(LikeRedisServer2_0 absl::flat_hash_map)

@@ -11,6 +11,7 @@
 #include <vector>
 #include <unordered_map>
 #include <sys/epoll.h>
+#include "../Common/LikeRedis/LikeRedisCommonHelpers.h"
 
 static int k_max_msg = 1048;
 enum {
@@ -53,18 +54,17 @@ private:
     static void connection_put(Conn* conn, std::vector<Conn*> &connections);
     static int32_t parse_request(const uint8_t* data, size_t len, std::vector<std::string> &out);
     static int32_t accept_new_connection(int fd, std::vector<Conn*> &connections);
-    static void handle_request(const uint8_t* req, uint32_t reqLen, std::string &response);
-    static void handle_get_request(const std::vector<std::string> &cmd, std::string &response);
-    static void handle_set_request(const std::vector<std::string> &cmd, std::string &response);
-    static void handle_del_request(const std::vector<std::string> &cmd, std::string &response);
+    static void handle_request(LR_REQUEST* req, LR_RESPONSE &response);
+    static void handle_get_request(LR_REQUEST *request, LR_RESPONSE &response);
+    static void handle_set_request(LR_REQUEST *request, LR_RESPONSE &response);
+    static void handle_del_request(LR_REQUEST *request, LR_RESPONSE &response);
+    static void handle_keys_request(LR_REQUEST *request, LR_RESPONSE &response);
 
-    static void handle_keys_request(std::vector<std::string> &cmd, std::string &response);
-
-    static void nil_response (std::string &response);
-    static void str_response (std::string &response, const std::string &val);
-    static void int_response(std::string &response, int64_t val);
-    static void err_response(std::string &response, int32_t code, const std::string &msg);
-    static void arr_response(std::string &response, uint32_t n);
+    static void nil_response (LR_RESPONSE &response);
+    static void str_response (LR_RESPONSE &response, const std::string &val);
+    static void int_response(LR_RESPONSE &response, int64_t val);
+    static void err_response(LR_RESPONSE &response, int32_t code, const std::string &msg);
+    static void arr_response(LR_RESPONSE &response, uint32_t n);
 public:
     explicit EventLoop(int serverFd);
 };
